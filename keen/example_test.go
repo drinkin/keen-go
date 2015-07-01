@@ -9,6 +9,7 @@ import (
 
 type ExampleEvent struct {
 	Name string `json:"name"`
+	keen.Event
 }
 
 func TestClient(t *testing.T) {
@@ -17,7 +18,9 @@ func TestClient(t *testing.T) {
 
 	client := &keen.Client{}
 
-	err := client.Track("test", &ExampleEvent{"hi"})
+	err := client.Track("test", &ExampleEvent{
+		Name: "hi",
+	})
 
 	assert.NoError(err)
 

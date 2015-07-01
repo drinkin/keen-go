@@ -4,7 +4,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/drinkin/shop/src/lg"
 	"github.com/facebookgo/muster"
 )
 
@@ -29,44 +28,30 @@ type Client struct {
 	muster    muster.Client
 }
 
-type Event struct {
-	Collection string
-	Data       interface{}
-
-	Timestamp time.Time
+func (c *Client) Track(cn string, data EventType) error {
+	return c.TrackWithTimestamp(cn, time.Now(), data)
 }
 
-func (c *Client) Track(cn string, data interface{}) error {
+func (c *Client) TrackWithTimestamp(cn string, t time.Time, data EventType) error {
 	if err := c.start(); err != nil {
 		return err
 	}
+	data.SetTimestamp(t)
 
-	evt := &Event{
+	c.muster.Work <- &batchEvent{
+		Event:      data,
 		Collection: cn,
-		Data:       data,
-		Timestamp:  time.Now(),
 	}
-	c.muster.Work <- evt
 	return nil
 }
 
-type EventWithTimestamp struct {
-}
-
-type musterBatch struct {
-	Client *Client
-	Events []*Event
-}
-
-func (b *musterBatch) Add(evt interface{}) {
-	b.Events = append(b.Events, evt.(*Event))
-}
-
-func (b *musterBatch) Fire(notifier muster.Notifier) {
-	defer notifier.Done()
-	for _, e := range b.Events {
-		lg.Pretty(e.Data)
+// Stop and gracefully wait for the background worker to finish processing
+// pending requests.
+func (c *Client) Stop() error {
+	if err := c.start(); err != nil {
+		return err
 	}
+	return c.muster.Stop()
 }
 
 func (c *Client) start() error {
@@ -91,13 +76,4 @@ func (c *Client) start() error {
 		c.startErr = c.muster.Start()
 	})
 	return c.startErr
-}
-
-// Stop and gracefully wait for the background worker to finish processing
-// pending requests.
-func (c *Client) Stop() error {
-	if err := c.start(); err != nil {
-		return err
-	}
-	return c.muster.Stop()
 }
