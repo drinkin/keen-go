@@ -1,15 +1,19 @@
 package keen
 
 import (
+	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
+	"github.com/dghubble/sling"
+	"github.com/drinkin/di/env"
 	"github.com/facebookgo/muster"
 )
 
 const (
 	defaultPendingWorkCapacity = 1000
-	defaultBatchTimeout        = time.Millisecond * 10
+	defaultBatchTimeout        = time.Millisecond * 200
 	defaultMaxBatchSize        = 50
 )
 
@@ -23,9 +27,26 @@ type Client struct {
 	// Amount of time after which to send a pending batch. Defaults to 10ms.
 	BatchTimeout time.Duration
 
+	ProjectId  string
+	APIKey     string
+	HttpClient *http.Client
+
 	startOnce sync.Once
 	startErr  error
-	muster    muster.Client
+
+	muster muster.Client
+	sling  *sling.Sling
+}
+
+func New(project_id, api_key string) *Client {
+	return &Client{
+		ProjectId: project_id,
+		APIKey:    api_key,
+	}
+}
+
+func FromEnv() *Client {
+	return New(env.MustGet("KEEN_PROJECT_ID"), env.MustGet("KEEN_API_KEY"))
 }
 
 func (c *Client) Track(cn string, data EventType) error {
@@ -38,7 +59,7 @@ func (c *Client) TrackWithTimestamp(cn string, t time.Time, data EventType) erro
 	}
 	data.SetTimestamp(t)
 
-	c.muster.Work <- &batchEvent{
+	c.muster.Work <- batchEvent{
 		Event:      data,
 		Collection: cn,
 	}
@@ -56,6 +77,10 @@ func (c *Client) Stop() error {
 
 func (c *Client) start() error {
 	c.startOnce.Do(func() {
+		// Setup sling
+		url := fmt.Sprintf("https://api.keen.io/3.0/projects/%s/", c.ProjectId)
+		c.sling = sling.New().Client(c.HttpClient).Base(url).Set("Authorization", c.APIKey)
+
 		pendingWorkCapacity := c.PendingWorkCapacity
 		if pendingWorkCapacity == 0 {
 			pendingWorkCapacity = defaultPendingWorkCapacity

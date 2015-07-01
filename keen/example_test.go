@@ -14,12 +14,15 @@ type ExampleEvent struct {
 
 func TestClient(t *testing.T) {
 	assert := require.New(t)
-	assert.Equal(1, 1)
 
-	client := &keen.Client{}
+	client := keen.FromEnv()
 
 	err := client.Track("test", &ExampleEvent{
 		Name: "hi",
+	})
+	assert.NoError(err)
+	err = client.Track("test", &ExampleEvent{
+		Name: "hi2",
 	})
 
 	assert.NoError(err)
